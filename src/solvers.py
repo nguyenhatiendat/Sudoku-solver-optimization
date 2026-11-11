@@ -21,11 +21,9 @@ def solve_baseline(board):
     def dfs(pos):
         nonlocal nodes, solved, timed_out
         if time.perf_counter() - start > TIMEOUT_S:
-            timed_out = True
-            return False
+            timed_out = True; return False
         if pos == 81:
-            solved = True
-            return True
+            solved = True; return True
         r, c = pos // 9, pos % 9
         if grid[r][c] != 0: return dfs(pos + 1)
         for num in range(1, 10):
@@ -69,12 +67,10 @@ def solve_mrv_scan(board):
     def dfs():
         nonlocal nodes, solved, timed_out
         if time.perf_counter() - start > TIMEOUT_S:
-            timed_out = True
-            return False
+            timed_out = True; return False
         r, c = find_best_spot()
         if r == -1:
-            solved = True
-            return True
+            solved = True; return True
         for num in range(1, 10):
             if is_safe(r, c, num):
                 nodes += 1
@@ -105,8 +101,7 @@ def solve_csp(board):
     def dfs():
         nonlocal nodes, solved, timed_out
         if time.perf_counter() - start > TIMEOUT_S:
-            timed_out = True
-            return False
+            timed_out = True; return False
         best_r, best_c, min_count, best_bit = -1, -1, 10, 0
         for r in range(9):
             for c in range(9):
@@ -118,8 +113,7 @@ def solve_csp(board):
                         min_count, best_r, best_c, best_bit = count, r, c, avail
                         if count == 1: break
         if best_r == -1:
-            solved = True
-            return True
+            solved = True; return True
         b = (best_r // 3) * 3 + (best_c // 3)
         avail = best_bit
         while avail:
@@ -131,6 +125,75 @@ def solve_csp(board):
             if dfs(): return True
             grid[best_r][best_c] = 0
             rows[best_r] &= ~bit; cols[best_c] &= ~bit; boxes[b] &= ~bit
+        return False
+
+    dfs()
+    return {"solved": solved, "timed_out": timed_out, "nodes": nodes, "time_ms": (time.perf_counter() - start) * 1000}
+
+def solve_forward_checking(board):
+    start = time.perf_counter()
+    grid = [row[:] for row in board]
+    nodes = 0
+    solved = False
+    timed_out = False
+
+    domains = [[set() for _ in range(9)] for _ in range(9)]
+    def is_safe(r, c, num):
+        for x in range(9):
+            if grid[r][x] == num or grid[x][c] == num: return False
+        sr, sc = (r // 3) * 3, (c // 3) * 3
+        for i in range(3):
+            for j in range(3):
+                if grid[sr + i][sc + j] == num: return False
+        return True
+
+    for r in range(9):
+        for c in range(9):
+            if grid[r][c] == 0:
+                domains[r][c] = {num for num in range(1, 10) if is_safe(r, c, num)}
+            else:
+                domains[r][c] = {grid[r][c]}
+
+    def dfs():
+        nonlocal nodes, solved, timed_out
+        if time.perf_counter() - start > TIMEOUT_S:
+            timed_out = True; return False
+
+        best_r, best_c, min_len = -1, -1, 10
+        for r in range(9):
+            for c in range(9):
+                if grid[r][c] == 0:
+                    if len(domains[r][c]) == 0: return False
+                    if len(domains[r][c]) < min_len:
+                        min_len = len(domains[r][c])
+                        best_r, best_c = r, c
+        
+        if best_r == -1:
+            solved = True; return True
+
+        for num in list(domains[best_r][best_c]):
+            grid[best_r][best_c] = num
+            nodes += 1
+
+            removed = []
+            valid = True
+            
+            for r in range(9):
+                for c in range(9):
+                    if grid[r][c] == 0 and (r == best_r or c == best_c or (r//3 == best_r//3 and c//3 == best_c//3)):
+                        if num in domains[r][c]:
+                            domains[r][c].remove(num)
+                            removed.append((r, c, num))
+                            if len(domains[r][c]) == 0:
+                                valid = False; break
+                if not valid: break
+
+            if valid and dfs(): return True
+
+            for r, c, n in removed:
+                domains[r][c].add(n)
+            grid[best_r][best_c] = 0
+
         return False
 
     dfs()
