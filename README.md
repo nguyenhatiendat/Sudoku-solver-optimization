@@ -3,7 +3,8 @@
 # 🧩 SUDOKU SOLVER OPTIMIZATION
 
 ### Đồ án Nhập môn Tối ưu hóa
-### Tối ưu hóa thuật toán giải Sudoku bằng Backtracking kết hợp MRV và Forward Checking
+### Tối ưu hóa thuật toán giải Sudoku bằng Backtracking kết hợp MRV và biểu diễn Bitmask
+
 
 ![Optimization](https://img.shields.io/badge/Topic-Optimization-blue)
 ![Algorithms](https://img.shields.io/badge/Algorithms-Backtracking%20%7C%20MRV%20%7C%20Bitmask-green)
@@ -21,7 +22,7 @@
 
 Sudoku là bài toán thỏa mãn ràng buộc (*Constraint Satisfaction Problem – CSP*). Bàn cờ tiêu chuẩn gồm 9 hàng, 9 cột và 9 khối 3×3. Mỗi ô trống cần được điền một chữ số từ 1 đến 9 sao cho không có chữ số nào bị lặp trong cùng hàng, cột hoặc khối 3×3.
 
-Khi số ô trống tăng, việc thử lần lượt các giá trị có thể dẫn đến nhiều nhánh tìm kiếm. Đồ án xây dựng và đánh giá ba phương pháp giải Sudoku nhằm khảo sát ảnh hưởng của chiến lược chọn ô và cách biểu diễn ràng buộc đến thời gian thực thi và số nút tìm kiếm.
+Khi số ô trống tăng, việc thử lần lượt các giá trị có thể dẫn đến nhiều nhánh tìm kiếm. Đồ án xây dựng và đánh giá ba phương pháp giải Sudoku nhằm khảo sát ảnh hưởng của chiến lược chọn ô và cách biểu diễn ràng buộc đến thời gian thực thi, số nút tìm kiếm và tỷ lệ giải thành công.
 
 Ngoài chương trình thực nghiệm Python, dự án còn có giao diện web chạy trên trình duyệt, hỗ trợ tạo đề, giải Sudoku, xem gợi ý, so sánh bàn cờ, theo dõi nhật ký và xuất lịch sử.
 
@@ -33,25 +34,46 @@ Ngoài chương trình thực nghiệm Python, dự án còn có giao diện web
 - Đo thời gian giải, số nút tìm kiếm và trạng thái giải thành công.
 - Xây dựng giao diện web để người dùng tương tác và quan sát kết quả.
 
+**Câu hỏi nghiên cứu**
+
+1. Bộ giải nào có thời gian giải trung bình thấp nhất ở từng mức độ?
+2. MRV giảm số nút tìm kiếm bao nhiêu so với Baseline, và giảm nút có luôn làm giảm thời gian không?
+3. Bộ giải nào đạt tỷ lệ giải thành công cao nhất trong giới hạn 5 giây?
+4. Biểu diễn bitmask cải thiện hiệu năng như thế nào so với kiểm tra ràng buộc bằng cách quét trực tiếp?
+
 ## 🧮 3. Mô hình hóa bài toán
 
-### 3.1. Biến và miền giá trị
+### 3.1. Đầu vào
 
-Với mỗi ô ở hàng \(r\), cột \(c\), biến \(x_{r,c}\) biểu diễn giá trị của ô đó, trong đó \(r,c \in \{1,\ldots,9\}\).
+Một bàn Sudoku 9×9 có một số ô đã cho sẵn (ô gợi ý), các ô còn lại để trống. Bộ dữ liệu thực nghiệm gồm 100 đề có nghiệm duy nhất, chia thành bốn mức Dễ, Trung bình, Khó và Siêu khó (25 đề mỗi mức).
 
-- Ô trống có miền giá trị ban đầu \(\{1,2,\ldots,9\}\).
+### 3.2. Biến quyết định và miền giá trị
+
+Với mỗi ô ở hàng `r`, cột `c`, biến `x[r,c]` biểu diễn giá trị của ô đó, trong đó `r, c` thuộc {1, 2, …, 9} (tổng cộng 81 biến).
+
+- Ô trống có miền giá trị ban đầu `D[r,c]` = {1, 2, …, 9}; miền này thu hẹp dần khi các ràng buộc được áp dụng.
 - Ô đã có số trong đề bài được giữ cố định.
-- Một nghiệm hợp lệ phải thỏa mãn đồng thời các ràng buộc hàng, cột và khối 3×3.
 
-### 3.2. Hàm mục tiêu đánh giá
+### 3.3. Mô hình CSP
 
-Đồ án tập trung cải thiện quá trình tìm kiếm bằng cách giảm **thời gian thực thi** và **số nút tìm kiếm**. Hai chỉ số được báo cáo riêng vì chúng có đơn vị khác nhau; không cộng trực tiếp mili giây với số nút để tạo ra một đại lượng định lượng.
+Bài toán được mô tả bởi bộ ba (X, D, C): X là tập 81 biến ô, D là miền giá trị của từng biến, C là tập ràng buộc `AllDifferent` trên mỗi hàng, mỗi cột và mỗi khối 3×3.
 
-### 3.3. Ràng buộc và giới hạn thời gian
+### 3.4. Hàm mục tiêu đánh giá
+
+Mọi nghiệm hợp lệ của Sudoku có chất lượng như nhau, nên đối tượng được tối ưu là **chi phí tìm nghiệm**. Với một bộ giải trên tập 100 đề, đồ án đo ba chỉ số:
+
+- Tỷ lệ giải thành công: số đề giải thành công chia cho tổng số đề — chỉ số ưu tiên, cần càng cao càng tốt.
+- Thời gian giải trung bình (ms) — cần càng thấp càng tốt, so sánh giữa các bộ giải có tỷ lệ thành công cao.
+- Số nút tìm kiếm trung bình — chỉ số phụ dùng để giải thích lượng tìm kiếm.
+
+Thời gian và số nút có đơn vị khác nhau nên được báo cáo riêng; không cộng trực tiếp mili giây với số nút để tạo ra một đại lượng tổng hợp.
+
+### 3.5. Ràng buộc và giới hạn
 
 - **Ràng buộc hàng:** các chữ số trong cùng một hàng không được trùng nhau.
 - **Ràng buộc cột:** các chữ số trong cùng một cột không được trùng nhau.
 - **Ràng buộc khối:** các chữ số trong cùng một khối 3×3 không được trùng nhau.
+- **Ràng buộc dữ liệu gốc:** các ô gợi ý ban đầu không được thay đổi.
 - **Giới hạn thời gian:** mã bộ giải Python đặt `TIMEOUT_S = 5.0` giây cho mỗi lần giải. Hết thời gian không có nghĩa là đề chắc chắn vô nghiệm; đó là trường hợp thuật toán chưa hoàn tất trong giới hạn thử nghiệm.
 
 Chi tiết mô hình hóa được trình bày trong [`report/FORMULATION.md`](report/FORMULATION.md).
@@ -64,19 +86,30 @@ Dự án thực nghiệm cài đặt ba bộ giải trong `src/solvers.py`:
 
 Duyệt các ô theo thứ tự hàng trước, cột sau. Với mỗi ô trống, thuật toán thử các số từ 1 đến 9, kiểm tra tính hợp lệ rồi tiếp tục đệ quy. Nếu một nhánh không dẫn đến nghiệm, thuật toán quay lui để thử giá trị khác.
 
-**Đặc điểm:** dễ triển khai nhưng có thể khảo sát nhiều nhánh khi đề khó.
+**Đặc điểm:** dễ triển khai, là mốc đối chứng để đo lợi ích của các cải tiến, nhưng có thể khảo sát rất nhiều nhánh khi đề khó.
 
 ### 4.2. MRV Scan — Backtracking kết hợp MRV
 
 MRV (*Minimum Remaining Values*) chọn ô trống có ít giá trị hợp lệ nhất trước. Việc ưu tiên ô bị ràng buộc chặt giúp phát hiện nhánh không khả thi sớm hơn và thường làm giảm số nút tìm kiếm.
 
-**Đánh đổi:** thuật toán phải quét các ô trống và tính số ứng viên ở mỗi bước, tạo thêm chi phí xử lý.
+**Đánh đổi:** thuật toán phải quét các ô trống và tính số ứng viên ở mỗi bước, tạo thêm chi phí xử lý. MRV là heuristic chọn biến, không phải kỹ thuật lan truyền ràng buộc.
 
 ### 4.3. CSP Bitmask + MRV
 
 Phương pháp này vẫn sử dụng chiến lược chọn ô MRV nhưng lưu trạng thái các hàng, cột và khối bằng **bitmask**. Các phép toán bit xác định nhanh những chữ số còn có thể điền; trạng thái được cập nhật khi gán số và khôi phục khi quay lui.
 
 **Đặc điểm:** trong bộ dữ liệu đi kèm, phương pháp này có thời gian trung bình thấp nhất ở cả bốn mức độ.
+
+### 4.4. So sánh nhanh
+
+| Tiêu chí | Baseline | MRV Scan | CSP Bitmask + MRV |
+|---|---|---|---|
+| Chiến lược chọn ô | Hàng–cột cố định | Ít ứng viên nhất | Ít ứng viên nhất |
+| Kiểm tra ràng buộc | Quét trực tiếp | Quét trực tiếp | Mặt nạ bit |
+| Số nút trên đề khó | Cao | Thấp | Thấp |
+| Chi phí mỗi bước | Đơn giản | Cao do quét ô | Thấp nhờ bitmask |
+
+> **Lưu ý về số nút:** nút được tăng khi thuật toán thử gán một giá trị hợp lệ theo kiểm tra ban đầu. Quy ước đếm phụ thuộc vị trí tăng bộ đếm trong mã, nên chỉ so sánh số nút giữa các phương pháp trong cùng dự án, không coi là số bước CPU chính xác.
 
 ## 🗂️ 5. Cấu trúc dự án
 
@@ -152,8 +185,8 @@ Dữ liệu trong `results/benchmark_results.csv` gồm **100 đề**, với 25 
 ### 6.4. Nhận xét
 
 - **CSP Bitmask + MRV** có thời gian trung bình thấp nhất ở cả bốn mức độ trong bộ dữ liệu này.
-- **MRV Scan** giảm đáng kể số nút so với Baseline, đặc biệt ở mức Khó và Siêu khó; tuy nhiên, chi phí quét tìm ô có ít ứng viên khiến MRV Scan chậm hơn Baseline ở một số đề dễ.
-- MRV Scan và CSP có số nút trung bình giống nhau trong dữ liệu, nhưng CSP nhanh hơn nhờ cách biểu diễn và kiểm tra ràng buộc bằng bitmask.
+- **MRV Scan** giảm đáng kể số nút so với Baseline, đặc biệt ở mức Khó và Siêu khó. Tuy nhiên, chi phí quét tìm ô có ít ứng viên khiến MRV Scan chậm hơn Baseline ở mức Dễ và Trung bình; từ mức Khó trở đi, lợi ích giảm nhánh mới vượt chi phí này.
+- MRV Scan và CSP có số nút trung bình giống nhau trong dữ liệu, nhưng CSP nhanh hơn nhờ cách biểu diễn và kiểm tra ràng buộc bằng bitmask. Như vậy, giảm số nút không tự động đồng nghĩa với giảm thời gian chạy.
 - Baseline giải thành công 99/100 đề; một đề Siêu khó chạm giới hạn thời gian khoảng 5 giây.
 - Kết quả chỉ phản ánh bộ 100 đề được cung cấp, chưa đủ để khẳng định hiệu năng tương tự với mọi bộ Sudoku.
 
@@ -211,7 +244,7 @@ Lệnh này sinh đề theo bốn mức độ, chạy ba bộ giải và ghi k�
 results/benchmark_results.csv
 ```
 
-Mỗi mức có 25 đề, tổng cộng 100 đề. Quá trình chạy có thể mất thời gian tùy máy, đặc biệt với Baseline ở mức Siêu khó.
+Mỗi mức có 25 đề, tổng cộng 100 đề. Quá trình chạy có thể mất thời gian tùy máy, đặc biệt với Baseline ở mức Siêu khó. Nếu chạy lại, đề được sinh mới nên số liệu sẽ khác bảng ở Mục 6; cần cập nhật bảng và nhận xét tương ứng.
 
 ### 9.4. Tạo biểu đồ
 
@@ -245,6 +278,7 @@ Có thể nhấp đúp vào tệp `index.html` hoặc mở trình duyệt rồi 
 - Việc sinh đề đặt số ô gợi ý mục tiêu, nhưng yêu cầu nghiệm duy nhất có thể khiến số ô gợi ý thực tế không luôn đạt đúng mục tiêu.
 - Hai chỉ số thời gian và số nút có đơn vị khác nhau nên được phân tích riêng.
 - Bộ giải có giới hạn thời gian 5 giây cho mỗi lần giải.
+- Forward Checking **chưa được cài đặt** trong `src/solvers.py` nên chưa nằm trong phạm vi đánh giá.
 
 ### Hướng phát triển
 
@@ -271,4 +305,3 @@ Có thể nhấp đúp vào tệp `index.html` hoặc mở trình duyệt rồi 
 - [Pandas Documentation](https://pandas.pydata.org/docs/)
 - [Matplotlib Documentation](https://matplotlib.org/stable/)
 - [`report/FORMULATION.md`](report/FORMULATION.md) — mô hình hóa bài toán của dự án.
-
