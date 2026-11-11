@@ -1,18 +1,18 @@
+
 <div align="center">
 
 # 🧩 SUDOKU SOLVER OPTIMIZATION
 
 ### Đồ án Nhập môn Tối ưu hóa
-### Tối ưu hóa thuật toán giải Sudoku bằng Backtracking kết hợp MRV và biểu diễn Bitmask
+### Tối ưu hóa thuật toán giải Sudoku bằng Backtracking kết hợp MRV và Forward Checking
 
+**Trường Đại học Văn Lang — Khoa Công nghệ Thông tin**  
+**Nhóm thực hiện: Nhóm 09**
 
 ![Optimization](https://img.shields.io/badge/Topic-Optimization-blue)
 ![Algorithms](https://img.shields.io/badge/Algorithms-Backtracking%20%7C%20MRV%20%7C%20Bitmask-green)
 ![Language](https://img.shields.io/badge/Language-Python%20%7C%20JavaScript-yellow)
 ![Dataset](https://img.shields.io/badge/Benchmark-100%20Sudoku-orange)
-
-**Trường Đại học Văn Lang — Khoa Công nghệ Thông tin**  
-**Nhóm thực hiện: Nhóm 09**
 
 </div>
 
@@ -22,273 +22,202 @@
 
 Sudoku là bài toán thỏa mãn ràng buộc (*Constraint Satisfaction Problem – CSP*). Bàn cờ tiêu chuẩn gồm 9 hàng, 9 cột và 9 khối 3×3. Mỗi ô trống cần được điền một chữ số từ 1 đến 9 sao cho không có chữ số nào bị lặp trong cùng hàng, cột hoặc khối 3×3.
 
-Khi số ô trống tăng, việc thử lần lượt các giá trị có thể dẫn đến nhiều nhánh tìm kiếm. Đồ án xây dựng và đánh giá ba phương pháp giải Sudoku nhằm khảo sát ảnh hưởng của chiến lược chọn ô và cách biểu diễn ràng buộc đến thời gian thực thi, số nút tìm kiếm và tỷ lệ giải thành công.
-
-Ngoài chương trình thực nghiệm Python, dự án còn có giao diện web chạy trên trình duyệt, hỗ trợ tạo đề, giải Sudoku, xem gợi ý, so sánh bàn cờ, theo dõi nhật ký và xuất lịch sử.
+Dự án xây dựng và đánh giá các phương pháp giải Sudoku bằng Python. Các thuật toán được so sánh dựa trên thời gian thực thi, số nút tìm kiếm và tỷ lệ giải thành công trên bộ dữ liệu gồm 100 đề Sudoku được sinh tự động.
 
 ## 🎯 2. Mục tiêu
 
-- Mô hình hóa Sudoku dưới dạng CSP gồm biến, miền giá trị và các ràng buộc.
-- Cài đặt và so sánh ba phương pháp: Baseline Backtracking, MRV Scan và CSP Bitmask + MRV.
-- Sinh đề Sudoku có nghiệm duy nhất và chia thành bốn mức độ.
-- Đo thời gian giải, số nút tìm kiếm và trạng thái giải thành công.
-- Xây dựng giao diện web để người dùng tương tác và quan sát kết quả.
-
-**Câu hỏi nghiên cứu**
-
-1. Bộ giải nào có thời gian giải trung bình thấp nhất ở từng mức độ?
-2. MRV giảm số nút tìm kiếm bao nhiêu so với Baseline, và giảm nút có luôn làm giảm thời gian không?
-3. Bộ giải nào đạt tỷ lệ giải thành công cao nhất trong giới hạn 5 giây?
-4. Biểu diễn bitmask cải thiện hiệu năng như thế nào so với kiểm tra ràng buộc bằng cách quét trực tiếp?
+- Mô hình hóa Sudoku dưới dạng bài toán CSP gồm biến, miền giá trị và các ràng buộc.
+- Cài đặt và so sánh các phương pháp giải Sudoku.
+- Sinh dữ liệu Sudoku theo bốn mức độ: Easy, Medium, Hard và Expert.
+- Đánh giá hiệu năng bằng thời gian giải, số nút tìm kiếm và trạng thái giải thành công.
+- Trực quan hóa kết quả thực nghiệm bằng biểu đồ.
 
 ## 🧮 3. Mô hình hóa bài toán
 
-### 3.1. Đầu vào
+### 3.1. Biến và miền giá trị
 
-Một bàn Sudoku 9×9 có một số ô đã cho sẵn (ô gợi ý), các ô còn lại để trống. Bộ dữ liệu thực nghiệm gồm 100 đề có nghiệm duy nhất, chia thành bốn mức Dễ, Trung bình, Khó và Siêu khó (25 đề mỗi mức).
+Mỗi ô ở hàng `r`, cột `c` được biểu diễn bởi biến `x[r,c]`. Bàn Sudoku có tổng cộng 81 biến.
 
-### 3.2. Biến quyết định và miền giá trị
-
-Với mỗi ô ở hàng `r`, cột `c`, biến `x[r,c]` biểu diễn giá trị của ô đó, trong đó `r, c` thuộc {1, 2, …, 9} (tổng cộng 81 biến).
-
-- Ô trống có miền giá trị ban đầu `D[r,c]` = {1, 2, …, 9}; miền này thu hẹp dần khi các ràng buộc được áp dụng.
 - Ô đã có số trong đề bài được giữ cố định.
+- Ô trống có miền giá trị từ 1 đến 9.
+- Các giá trị có thể điền phải thỏa mãn ràng buộc hàng, cột và khối 3×3.
 
-### 3.3. Mô hình CSP
+### 3.2. Các ràng buộc
 
-Bài toán được mô tả bởi bộ ba (X, D, C): X là tập 81 biến ô, D là miền giá trị của từng biến, C là tập ràng buộc `AllDifferent` trên mỗi hàng, mỗi cột và mỗi khối 3×3.
+- **Ràng buộc hàng:** Các chữ số trong cùng một hàng không được trùng nhau.
+- **Ràng buộc cột:** Các chữ số trong cùng một cột không được trùng nhau.
+- **Ràng buộc khối:** Các chữ số trong cùng một khối 3×3 không được trùng nhau.
+- **Ràng buộc dữ liệu gốc:** Các ô đã được cho sẵn không được thay đổi.
 
-### 3.4. Hàm mục tiêu đánh giá
+### 3.3. Tiêu chí đánh giá
 
-Mọi nghiệm hợp lệ của Sudoku có chất lượng như nhau, nên đối tượng được tối ưu là **chi phí tìm nghiệm**. Với một bộ giải trên tập 100 đề, đồ án đo ba chỉ số:
+Các thuật toán được đánh giá bằng ba chỉ số:
 
-- Tỷ lệ giải thành công: số đề giải thành công chia cho tổng số đề — chỉ số ưu tiên, cần càng cao càng tốt.
-- Thời gian giải trung bình (ms) — cần càng thấp càng tốt, so sánh giữa các bộ giải có tỷ lệ thành công cao.
-- Số nút tìm kiếm trung bình — chỉ số phụ dùng để giải thích lượng tìm kiếm.
+- **Thời gian giải (ms):** Thời gian thuật toán cần để tìm lời giải.
+- **Số nút tìm kiếm (Nodes):** Số lần thử gán giá trị trong quá trình tìm kiếm.
+- **Tỷ lệ giải thành công:** Số đề giải thành công trên tổng số đề được kiểm tra.
 
-Thời gian và số nút có đơn vị khác nhau nên được báo cáo riêng; không cộng trực tiếp mili giây với số nút để tạo ra một đại lượng tổng hợp.
+Thời gian và số nút tìm kiếm được báo cáo riêng vì chúng có đơn vị đo khác nhau.
 
-### 3.5. Ràng buộc và giới hạn
+## ⚙️ 4. Các thuật toán
 
-- **Ràng buộc hàng:** các chữ số trong cùng một hàng không được trùng nhau.
-- **Ràng buộc cột:** các chữ số trong cùng một cột không được trùng nhau.
-- **Ràng buộc khối:** các chữ số trong cùng một khối 3×3 không được trùng nhau.
-- **Ràng buộc dữ liệu gốc:** các ô gợi ý ban đầu không được thay đổi.
-- **Giới hạn thời gian:** mã bộ giải Python đặt `TIMEOUT_S = 5.0` giây cho mỗi lần giải. Hết thời gian không có nghĩa là đề chắc chắn vô nghiệm; đó là trường hợp thuật toán chưa hoàn tất trong giới hạn thử nghiệm.
+### 4.1. Baseline Backtracking
 
-Chi tiết mô hình hóa được trình bày trong [`report/FORMULATION.md`](report/FORMULATION.md).
+Duyệt các ô theo thứ tự hàng trước, cột sau. Với mỗi ô trống, thuật toán thử lần lượt các số từ 1 đến 9. Nếu lựa chọn không dẫn đến nghiệm, thuật toán quay lui để thử giá trị khác.
 
-## ⚙️ 4. Các phương pháp giải
+### 4.2. MRV Scan
 
-Dự án thực nghiệm cài đặt ba bộ giải trong `src/solvers.py`:
-
-### 4.1. Baseline — Backtracking cơ sở
-
-Duyệt các ô theo thứ tự hàng trước, cột sau. Với mỗi ô trống, thuật toán thử các số từ 1 đến 9, kiểm tra tính hợp lệ rồi tiếp tục đệ quy. Nếu một nhánh không dẫn đến nghiệm, thuật toán quay lui để thử giá trị khác.
-
-**Đặc điểm:** dễ triển khai, là mốc đối chứng để đo lợi ích của các cải tiến, nhưng có thể khảo sát rất nhiều nhánh khi đề khó.
-
-### 4.2. MRV Scan — Backtracking kết hợp MRV
-
-MRV (*Minimum Remaining Values*) chọn ô trống có ít giá trị hợp lệ nhất trước. Việc ưu tiên ô bị ràng buộc chặt giúp phát hiện nhánh không khả thi sớm hơn và thường làm giảm số nút tìm kiếm.
-
-**Đánh đổi:** thuật toán phải quét các ô trống và tính số ứng viên ở mỗi bước, tạo thêm chi phí xử lý. MRV là heuristic chọn biến, không phải kỹ thuật lan truyền ràng buộc.
+MRV (*Minimum Remaining Values*) chọn ô trống có ít giá trị hợp lệ nhất trước. Chiến lược này ưu tiên các ô bị ràng buộc nhiều, giúp phát hiện nhánh không khả thi sớm hơn.
 
 ### 4.3. CSP Bitmask + MRV
 
-Phương pháp này vẫn sử dụng chiến lược chọn ô MRV nhưng lưu trạng thái các hàng, cột và khối bằng **bitmask**. Các phép toán bit xác định nhanh những chữ số còn có thể điền; trạng thái được cập nhật khi gán số và khôi phục khi quay lui.
+Kết hợp chiến lược MRV với cách biểu diễn trạng thái hàng, cột và khối bằng bitmask. Các phép toán bit được sử dụng để xác định nhanh những chữ số còn có thể điền vào một ô.
 
-**Đặc điểm:** trong bộ dữ liệu đi kèm, phương pháp này có thời gian trung bình thấp nhất ở cả bốn mức độ.
+### 4.4. Forward Checking
 
-### 4.4. So sánh nhanh
-
-| Tiêu chí | Baseline | MRV Scan | CSP Bitmask + MRV |
-|---|---|---|---|
-| Chiến lược chọn ô | Hàng–cột cố định | Ít ứng viên nhất | Ít ứng viên nhất |
-| Kiểm tra ràng buộc | Quét trực tiếp | Quét trực tiếp | Mặt nạ bit |
-| Số nút trên đề khó | Cao | Thấp | Thấp |
-| Chi phí mỗi bước | Đơn giản | Cao do quét ô | Thấp nhờ bitmask |
-
-> **Lưu ý về số nút:** nút được tăng khi thuật toán thử gán một giá trị hợp lệ theo kiểm tra ban đầu. Quy ước đếm phụ thuộc vị trí tăng bộ đếm trong mã, nên chỉ so sánh số nút giữa các phương pháp trong cùng dự án, không coi là số bước CPU chính xác.
+Forward Checking cập nhật miền giá trị của các ô chưa điền sau mỗi lần gán số. Nếu một ô liên quan không còn giá trị hợp lệ, thuật toán phát hiện nhánh không khả thi và quay lui.
 
 ## 🗂️ 5. Cấu trúc dự án
 
 ```text
-Nhom09_sudoku-solver-optimization-main/
+Sudoku-solver-optimization/
 ├── README.md
 ├── requirements.txt
 ├── run_experiments.py
 ├── analyze.py
 ├── data/
-│   └── README.md
+├── figures/
+├── notebooks/
 ├── report/
-│   └── FORMULATION.md
-├── src/
-│   ├── solvers.py
-│   ├── generator.py
-│   └── web_demo/
-│       ├── index.html
-│       ├── style.css
-│       ├── logic.js
-│       ├── ui.js
-│       └── images/
 ├── results/
 │   └── benchmark_results.csv
-└── figures/
-    ├── fig_runtime_comparison.png
-    └── fig_nodes_comparison.png
+└── src/
+    ├── generator.py
+    └── solvers.py
 ```
 
 | Tệp/thư mục | Chức năng |
 |---|---|
-| `src/solvers.py` | Cài đặt ba bộ giải và trả về trạng thái, thời gian, số nút |
-| `src/generator.py` | Sinh bàn Sudoku và kiểm tra để giữ đề có duy nhất một nghiệm |
-| `run_experiments.py` | Chạy benchmark và ghi kết quả ra CSV |
-| `analyze.py` | Đọc CSV, tính trung bình và tạo biểu đồ |
-| `results/benchmark_results.csv` | Dữ liệu benchmark 100 đề được cung cấp kèm dự án |
-| `figures/` | Biểu đồ thời gian và số nút tìm kiếm |
-| `report/FORMULATION.md` | Mô hình hóa bài toán |
-| `src/web_demo/` | Giao diện Sudoku chạy trực tiếp trên trình duyệt |
+| `src/solvers.py` | Cài đặt các thuật toán giải Sudoku |
+| `src/generator.py` | Sinh đề Sudoku và kiểm tra số lượng nghiệm |
+| `run_experiments.py` | Chạy thực nghiệm và ghi kết quả vào CSV |
+| `analyze.py` | Đọc CSV và tạo biểu đồ so sánh |
+| `results/benchmark_results.csv` | Lưu kết quả thực nghiệm của 100 đề |
+| `figures/` | Lưu các biểu đồ được tạo từ dữ liệu benchmark |
+| `notebooks/` | Lưu notebook phục vụ quá trình thực hiện |
+| `data/` | Thư mục dữ liệu của dự án |
+| `report/` | Lưu tài liệu và nội dung báo cáo |
 
-## 📊 6. Kết quả thực nghiệm
+## 📊 6. Dữ liệu thực nghiệm
 
-Dữ liệu trong `results/benchmark_results.csv` gồm **100 đề**, với 25 đề ở mỗi mức Dễ, Trung bình, Khó và Siêu khó. Các số liệu dưới đây là trung bình được tính từ CSV đi kèm dự án; thời gian thực tế có thể thay đổi theo máy và môi trường chạy.
+Dữ liệu benchmark nằm tại `results/benchmark_results.csv`, gồm **100 đề Sudoku**, chia đều thành bốn mức độ:
 
-### 6.1. Thời gian giải trung bình
+| Mức độ | Số lượng đề |
+|---|---:|
+| Easy | 25 |
+| Medium | 25 |
+| Hard | 25 |
+| Expert | 25 |
+| **Tổng cộng** | **100** |
 
-| Mức độ | Baseline (ms) | MRV Scan (ms) | CSP Bitmask + MRV (ms) |
-|---|---:|---:|---:|
-| Dễ | 0.231 | 2.819 | **0.218** |
-| Trung bình | 1.959 | 5.424 | **0.331** |
-| Khó | 28.728 | 12.152 | **0.621** |
-| Siêu khó | 486.408 | 65.394 | **2.987** |
+Các đề được sinh bởi `src/generator.py`. Số ô gợi ý mục tiêu được thiết lập như sau:
 
-### 6.2. Số nút tìm kiếm trung bình
+| Mức độ | Số ô gợi ý mục tiêu |
+|---|---:|
+| Easy | 45 |
+| Medium | 35 |
+| Hard | 28 |
+| Expert | 21 |
 
-| Mức độ | Baseline | MRV Scan | CSP Bitmask + MRV |
-|---|---:|---:|---:|
-| Dễ | 72.5 | **36.0** | **36.0** |
-| Trung bình | 581.8 | **49.6** | **49.6** |
-| Khó | 8,542.9 | **84.8** | **84.8** |
-| Siêu khó | 100,433.9 | **291.9** | **291.9** |
+Bộ sinh kiểm tra số lượng nghiệm và chỉ giữ lại các đề có đúng một nghiệm.
 
-### 6.3. Tỷ lệ giải thành công
+### 6.1. Các trường dữ liệu trong CSV
 
-| Mức độ | Baseline | MRV Scan | CSP Bitmask + MRV |
-|---|---:|---:|---:|
-| Dễ | 25/25 | 25/25 | 25/25 |
-| Trung bình | 25/25 | 25/25 | 25/25 |
-| Khó | 25/25 | 25/25 | 25/25 |
-| Siêu khó | 24/25 | 25/25 | 25/25 |
-| **Tổng** | **99/100** | **100/100** | **100/100** |
+| Cột | Ý nghĩa |
+|---|---|
+| `Level` | Mức độ đề Sudoku |
+| `Puzzle_ID` | Mã đề trong từng mức |
+| `Seed` | Giá trị seed dùng để sinh đề |
+| `Base_Time`, `Base_Nodes`, `Base_Solved` | Thời gian, số nút và trạng thái giải của Baseline |
+| `MRV_Time`, `MRV_Nodes`, `MRV_Solved` | Thời gian, số nút và trạng thái giải của MRV Scan |
+| `CSP_Time`, `CSP_Nodes`, `CSP_Solved` | Thời gian, số nút và trạng thái giải của CSP Bitmask |
+| `FC_Time`, `FC_Nodes`, `FC_Solved` | Thời gian, số nút và trạng thái giải của Forward Checking |
 
-### 6.4. Nhận xét
+Các cột thời gian có đơn vị mili giây. Các cột `*_Solved` thể hiện thuật toán có giải thành công đề tương ứng hay không.
 
-- **CSP Bitmask + MRV** có thời gian trung bình thấp nhất ở cả bốn mức độ trong bộ dữ liệu này.
-- **MRV Scan** giảm đáng kể số nút so với Baseline, đặc biệt ở mức Khó và Siêu khó. Tuy nhiên, chi phí quét tìm ô có ít ứng viên khiến MRV Scan chậm hơn Baseline ở mức Dễ và Trung bình; từ mức Khó trở đi, lợi ích giảm nhánh mới vượt chi phí này.
-- MRV Scan và CSP có số nút trung bình giống nhau trong dữ liệu, nhưng CSP nhanh hơn nhờ cách biểu diễn và kiểm tra ràng buộc bằng bitmask. Như vậy, giảm số nút không tự động đồng nghĩa với giảm thời gian chạy.
-- Baseline giải thành công 99/100 đề; một đề Siêu khó chạm giới hạn thời gian khoảng 5 giây.
-- Kết quả chỉ phản ánh bộ 100 đề được cung cấp, chưa đủ để khẳng định hiệu năng tương tự với mọi bộ Sudoku.
+### 6.2. Kết quả giải thành công từ CSV hiện tại
 
-## 📈 7. Biểu đồ kết quả
+Dựa trên 100 dòng dữ liệu trong file CSV được lưu trên repository:
 
-Các biểu đồ được tạo bởi `analyze.py` từ `results/benchmark_results.csv`. Trục thời gian và số nút sử dụng thang logarit để thể hiện sự chênh lệch giữa các thuật toán.
+| Thuật toán | Số đề giải thành công |
+|---|---:|
+| Baseline Backtracking | 99/100 |
+| MRV Scan | 100/100 |
+| CSP Bitmask + MRV | 100/100 |
+| Forward Checking | 100/100 |
 
-### So sánh thời gian giải
+Một đề ở mức Expert không được Baseline giải thành công trong giới hạn thời gian. Ba phương pháp còn lại giải thành công toàn bộ 100 đề trong dữ liệu hiện tại.
 
-![So sánh thời gian giải trung bình](figures/fig_runtime_comparison.png)
+> Kết quả trên là trạng thái của file CSV hiện được lưu trong repository. Nếu chạy lại thực nghiệm, thời gian và số nút có thể thay đổi theo dữ liệu sinh ra, phần cứng và môi trường chạy.
 
-### So sánh số nút tìm kiếm
+## 📈 7. Phân tích và trực quan hóa
 
-![So sánh số nút tìm kiếm trung bình](figures/fig_nodes_comparison.png)
+Chạy `analyze.py` để đọc `results/benchmark_results.csv` và tạo hai biểu đồ:
 
-## 🖥️ 8. Giao diện web
+- `figures/fig_runtime_comparison.png`: So sánh thời gian giải trung bình của bốn thuật toán theo từng mức độ.
+- `figures/fig_nodes_comparison.png`: So sánh số nút tìm kiếm trung bình của bốn thuật toán theo từng mức độ.
 
-Giao diện nằm trong `src/web_demo/` và chạy phía trình duyệt bằng HTML, CSS và JavaScript. Các chức năng chính gồm:
+Các biểu đồ sử dụng thang logarit (`log scale`) để thể hiện chênh lệch hiệu năng giữa các thuật toán.
 
-- Hiển thị bàn Sudoku 9×9 và hỗ trợ nhập đề.
-- Tạo đề theo các mức Dễ, Trung bình, Khó và Siêu khó.
-- Giải Sudoku nhanh hoặc theo từng bước.
-- Hiển thị gợi ý, số lỗi, thời gian và số nút.
-- So sánh hai bàn cờ, xem nhật ký và biểu đồ.
-- Lưu lịch sử bằng `localStorage`, xóa lịch sử và xuất CSV.
+## 🚀 8. Cài đặt và chạy chương trình
 
-Giao diện web chạy thuật toán JavaScript riêng ở phía trình duyệt; vì vậy, số liệu của giao diện không nhất thiết trùng khớp hoàn toàn với benchmark Python.
-
-## 🚀 9. Cài đặt và chạy chương trình
-
-### 9.1. Yêu cầu
+### 8.1. Yêu cầu
 
 - Python 3.8 trở lên.
-- Các thư viện được liệt kê trong `requirements.txt`: `pandas`, `matplotlib`, `numpy`.
-- Trình duyệt web hiện đại để chạy giao diện.
-- Kết nối Internet nếu giao diện cần tải thư viện từ CDN.
+- Các thư viện được liệt kê trong `requirements.txt`.
 
-### 9.2. Mở terminal tại thư mục gốc dự án
+### 8.2. Cài đặt thư viện
 
-Cài đặt thư viện:
+Mở terminal tại thư mục gốc dự án và chạy:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 9.3. Chạy thực nghiệm Python
+### 8.3. Chạy thực nghiệm
+
+Sau khi bảo đảm `src/solvers.py` có đủ bốn hàm giải tương ứng với các hàm được import trong `run_experiments.py`, chạy:
 
 ```bash
 python run_experiments.py
 ```
 
-Lệnh này sinh đề theo bốn mức độ, chạy ba bộ giải và ghi kết quả mới vào:
+Chương trình sinh 25 đề cho mỗi mức độ, chạy bốn thuật toán và ghi kết quả vào:
 
 ```text
 results/benchmark_results.csv
 ```
 
-Mỗi mức có 25 đề, tổng cộng 100 đề. Quá trình chạy có thể mất thời gian tùy máy, đặc biệt với Baseline ở mức Siêu khó. Nếu chạy lại, đề được sinh mới nên số liệu sẽ khác bảng ở Mục 6; cần cập nhật bảng và nhận xét tương ứng.
+### 8.4. Tạo biểu đồ
 
-### 9.4. Tạo biểu đồ
-
-Sau khi có file CSV, chạy:
+Sau khi có file CSV với đầy đủ các cột kết quả, chạy:
 
 ```bash
 python analyze.py
 ```
 
-Hai biểu đồ được xuất vào thư mục `figures/`:
+Hai biểu đồ sẽ được lưu trong thư mục `figures/`.
 
-- `fig_runtime_comparison.png`
-- `fig_nodes_comparison.png`
+## ⚠️ 9. Giới hạn và hướng phát triển
 
-### 9.5. Mở giao diện web
+- Bộ dữ liệu thực nghiệm hiện gồm 100 đề, phù hợp để so sánh trong phạm vi bài tập.
+- Thời gian chạy phụ thuộc cấu hình phần cứng và môi trường thực thi.
+- Số ô gợi ý là mục tiêu khi sinh đề; số ô thực tế có thể phụ thuộc điều kiện giữ đề có nghiệm duy nhất.
+- Nên chạy thực nghiệm nhiều lần để có đánh giá ổn định hơn.
+- Có thể mở rộng số lượng đề, bổ sung thống kê trung vị và độ lệch chuẩn.
+- Cần bảo đảm mã nguồn của cả bốn thuật toán đồng bộ với script chạy thực nghiệm và dữ liệu CSV.
 
-Mở trực tiếp tệp sau bằng trình duyệt:
-
-```text
-src/web_demo/index.html
-```
-
-Có thể nhấp đúp vào tệp `index.html` hoặc mở trình duyệt rồi kéo tệp vào cửa sổ trình duyệt. Một số thư viện giao diện được tải từ CDN nên cần Internet để hiển thị đầy đủ các thành phần phụ thuộc.
-
-## ⚠️ 10. Giới hạn và hướng phát triển
-
-### Giới hạn hiện tại
-
-- Bộ benchmark gồm 100 đề, chỉ phù hợp để minh họa và so sánh ban đầu.
-- Thời gian chạy phụ thuộc phần cứng, phiên bản Python và tải hệ thống.
-- Việc sinh đề đặt số ô gợi ý mục tiêu, nhưng yêu cầu nghiệm duy nhất có thể khiến số ô gợi ý thực tế không luôn đạt đúng mục tiêu.
-- Hai chỉ số thời gian và số nút có đơn vị khác nhau nên được phân tích riêng.
-- Bộ giải có giới hạn thời gian 5 giây cho mỗi lần giải.
-- Forward Checking **chưa được cài đặt** trong `src/solvers.py` nên chưa nằm trong phạm vi đánh giá.
-
-### Hướng phát triển
-
-- Tăng số lượng đề, chạy lặp benchmark và báo cáo trung vị, độ lệch chuẩn.
-- Kiểm tra dữ liệu đầu vào và phát hiện đề mâu thuẫn.
-- Bổ sung, đánh giá rõ ràng Forward Checking hoặc các heuristic khác như Least Constraining Value (LCV).
-- Đo riêng chi phí chọn ô, kiểm tra ràng buộc và cập nhật trạng thái.
-- Bổ sung kiểm thử tự động cho đề hợp lệ, đề vô nghiệm và dữ liệu nhập sai.
-
-## 👥 11. Thành viên thực hiện
+## 👥 10. Thành viên thực hiện
 
 **Nhóm 09 — Khoa Công nghệ Thông tin, Trường Đại học Văn Lang**
 
@@ -298,10 +227,10 @@ Có thể nhấp đúp vào tệp `index.html` hoặc mở trình duyệt rồi 
 | Nguyễn Bảo Lâm | 2474802010209 |
 | Lâm Hữu Lộc | 2474802010221 |
 
-## 📚 12. Tài liệu tham khảo
+## 📚 11. Tài liệu tham khảo
 
 - Russell, S. và Norvig, P. — *Artificial Intelligence: A Modern Approach*, nội dung về Constraint Satisfaction Problems.
 - [Python Documentation](https://docs.python.org/3/)
 - [Pandas Documentation](https://pandas.pydata.org/docs/)
 - [Matplotlib Documentation](https://matplotlib.org/stable/)
-- [`report/FORMULATION.md`](report/FORMULATION.md) — mô hình hóa bài toán của dự án.
+- [Sudoku Solver Optimization — GitHub Repository](https://github.com/nguyenhatiendat/Sudoku-solver-optimization)
